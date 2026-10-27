@@ -5,6 +5,9 @@ Highlights of each release. The full list of merged pull requests is in each
 
 ## [Unreleased]
 
+- The `logging` step no longer adds `/swapfile` to `/etc/fstab` or reports "swap created" when creating the swap
+  file fails: it removes the partial file and the step shows FAILED. When `swapon` refuses a `fallocate` swap file
+  (some filesystems), it writes the file with `dd` instead.
 - `server-prep.sh` exits 1 when a step fails or the run stops early, and an unknown `--only` or
   `--skip` name exits 2 with the valid steps.
 - Avoid an unset-variable error when `server-prep.sh` is passed to bash through standard input or `bash -c`.

@@ -33,6 +33,7 @@ git clone https://github.com/exceev-consulting/server-prep.git && cd server-prep
    shellcheck -S warning server-prep.sh server-audit.sh server-preconfig.sh extras/github-runners/*.sh scripts/*.sh tests/*.sh
    scripts/gen-data.sh --check   # the setup console's data matches the scripts (needs jq)
    bash tests/exit-status.sh     # argument and final-status checks; no system changes
+   bash tests/swap.sh            # swap file creation with fake commands; no system changes
    ```
 2. **Dry run** on a test server, then a real run if your change modifies the system:
    ```bash

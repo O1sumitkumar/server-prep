@@ -1431,6 +1431,10 @@ EOF
     return 0
 }
 
+swapfile_enable() {   # /swapfile exists: make it a swap area and turn it on
+    run chmod 600 /swapfile && run mkswap /swapfile && run swapon /swapfile
+}
+
 step_logging() {
     write_file /etc/systemd/journald.conf.d/50-server-prep.conf 644 <<'EOF'
 # Managed by server-prep.sh
@@ -1443,7 +1447,23 @@ EOF
     run systemctl restart systemd-journald
     if [[ -z "$(swapon --show --noheadings 2>/dev/null)" && -n "$SWAP_SIZE" && "$SWAP_SIZE" != "0" ]]; then
         info "creating ${SWAP_SIZE} swap file"
-        run fallocate -l "$SWAP_SIZE" /swapfile && run chmod 600 /swapfile && run mkswap /swapfile && run swapon /swapfile
+        if ! run fallocate -l "$SWAP_SIZE" /swapfile; then
+            run rm -f /swapfile
+            note "swap ${SWAP_SIZE} not created: fallocate failed (full disk?), see ${LOG_FILE}"
+            return 1
+        fi
+        if ! swapfile_enable; then
+            # Some filesystems can't use a fallocate'd swap file (swapon sees holes): write it with dd.
+            warn "this filesystem can't use a fallocate swap file, writing it with dd instead"
+            local mib
+            mib=$(( $(numfmt --from=iec "${SWAP_SIZE^^}" 2>/dev/null || echo 0) / 1048576 ))
+            run rm -f /swapfile
+            if (( mib < 1 )) || ! run dd if=/dev/zero of=/swapfile bs=1M count="$mib" || ! swapfile_enable; then
+                run rm -f /swapfile
+                note "swap ${SWAP_SIZE} not created: mkswap/swapon failed, see ${LOG_FILE}"
+                return 1
+            fi
+        fi
         grep -q '^/swapfile' /etc/fstab || { { cat /etc/fstab; echo '/swapfile none swap sw 0 0'; } | write_file /etc/fstab 644; }
         changed; note "swap ${SWAP_SIZE} created"
     fi
