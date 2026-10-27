@@ -1449,18 +1449,26 @@ EOF
         info "creating ${SWAP_SIZE} swap file"
         if ! run fallocate -l "$SWAP_SIZE" /swapfile; then
             run rm -f /swapfile
+            grep -q '^/swapfile' /etc/fstab && todo "Remove the /swapfile line from /etc/fstab: there is no working swap file"
             note "swap ${SWAP_SIZE} not created: fallocate failed (full disk?), see ${LOG_FILE}"
             return 1
         fi
         if ! swapfile_enable; then
-            # Some filesystems can't use a fallocate'd swap file (swapon sees holes): write it with dd.
-            warn "this filesystem can't use a fallocate swap file, writing it with dd instead"
-            local mib
-            mib=$(( $(numfmt --from=iec "${SWAP_SIZE^^}" 2>/dev/null || echo 0) / 1048576 ))
+            warn "swapon refused the fallocate swap file, trying again with a file written by dd"
+            local bytes mib
+            bytes=$(numfmt --from=iec -- "${SWAP_SIZE^^}" 2>/dev/null)
+            [[ $bytes =~ ^[0-9]+$ ]] || bytes=0
+            mib=$(( bytes / 1048576 ))
             run rm -f /swapfile
-            if (( mib < 1 )) || ! run dd if=/dev/zero of=/swapfile bs=1M count="$mib" || ! swapfile_enable; then
+            if (( mib < 1 )); then
+                grep -q '^/swapfile' /etc/fstab && todo "Remove the /swapfile line from /etc/fstab: there is no working swap file"
+                note "swap ${SWAP_SIZE} not created: size not understood, use a value like 2G or 512M"
+                return 1
+            fi
+            if ! run dd if=/dev/zero of=/swapfile bs=1M count="$mib" || ! swapfile_enable; then
                 run rm -f /swapfile
-                note "swap ${SWAP_SIZE} not created: mkswap/swapon failed, see ${LOG_FILE}"
+                grep -q '^/swapfile' /etc/fstab && todo "Remove the /swapfile line from /etc/fstab: there is no working swap file"
+                note "swap ${SWAP_SIZE} not created: mkswap/swapon failed, see ${LOG_FILE} (set SWAP_SIZE=0 to skip)"
                 return 1
             fi
         fi
